@@ -3,14 +3,16 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
@@ -20,11 +22,14 @@ END_HOUR = 20
 REPO = Path("/home/jojo/projects/korail-auto-waitlist")
 API_PROJECT = REPO / "apps/api"
 STATE_PATH = Path.home() / ".local/state/korail-2p-watchdog/state.json"
+LOCK_PATH = Path.home() / ".local/state/korail-2p-watchdog/watchdog.lock"
 CAPTURE_ROOT = Path.home() / ".cache/railwait/watch"
 OFFICIAL_URL = "https://www.korail.com/ticket/search"
 AVAILABLE_STATUSES = {"available", "limited"}
 PROTECTION_COOLDOWN_SECONDS = 900
+RATE_LIMIT_COOLDOWN_SECONDS = 900
 OUTAGE_COOLDOWN_SECONDS = 300
+MIN_QUERY_INTERVAL_SECONDS = 540
 
 
 def load_state(path: Path = STATE_PATH) -> dict[str, Any]:
@@ -46,8 +51,27 @@ def save_state(state: dict[str, Any], path: Path = STATE_PATH) -> None:
     temporary.replace(path)
 
 
+@contextmanager
+def exclusive_run_lock(path: Path = LOCK_PATH) -> Iterator[bool]:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with path.open("a+", encoding="utf-8") as handle:
+        path.chmod(0o600)
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def within_window(now: datetime) -> bool:
-    return now.astimezone(KST).date().isoformat() == TARGET_DATE and START_HOUR <= now.astimezone(KST).hour < END_HOUR
+    return (
+        now.astimezone(KST).date().isoformat() == TARGET_DATE
+        and START_HOUR <= now.astimezone(KST).hour < END_HOUR
+    )
 
 
 def available_entries(summary: dict[str, Any]) -> list[dict[str, str]]:
@@ -100,7 +124,9 @@ def availability_message(entries: list[dict[str, str]]) -> str:
             f"{_clock(entry['departure_at'])}→{_clock(entry['arrival_at'])} "
             f"{entry['seat_label']} ({qualifier}, 2명 조건 조회)"
         )
-    lines.extend((f"공식 예매: {OFFICIAL_URL}", "자동 예약·구매·결제는 하지 않았습니다."))
+    lines.extend(
+        (f"공식 예매: {OFFICIAL_URL}", "자동 예약·구매·결제는 하지 않았습니다.")
+    )
     return "\n".join(lines)
 
 
@@ -116,30 +142,48 @@ def evaluate_summary(
         entries = available_entries(summary)
         current_keys = sorted(entry["key"] for entry in entries)
         previous_keys = {
-            str(value) for value in state.get("available_keys", []) if isinstance(value, str)
+            str(value)
+            for value in state.get("available_keys", [])
+            if isinstance(value, str)
         }
-        newly_available = [entry for entry in entries if entry["key"] not in previous_keys]
+        newly_available = [
+            entry for entry in entries if entry["key"] not in previous_keys
+        ]
         new_state["available_keys"] = current_keys
         new_state.pop("cooldown_until", None)
         new_state.pop("last_error", None)
-        return (availability_message(newly_available) if newly_available else ""), new_state
+        return (
+            availability_message(newly_available) if newly_available else ""
+        ), new_state
 
-    new_state["available_keys"] = []
+    trigger = str(summary.get("trigger") or "")
+    outage = outcome == "provider_unavailable" or (
+        outcome == "source_unavailable"
+        and trigger in {"maintenance_page", "service_outage_page"}
+    )
+    error_key = "provider_unavailable" if outage else outcome
     previous_error = str(state.get("last_error", ""))
-    new_state["last_error"] = outcome
+    new_state["last_error"] = error_key
     if outcome == "provider_access_restricted":
         new_state["cooldown_until"] = (
             now.astimezone(KST) + timedelta(seconds=PROTECTION_COOLDOWN_SECONDS)
         ).isoformat()
-        message = "⚠️ 코레일 접근 제한을 감지해 우회하지 않고 15분 동안 조회를 중단합니다."
-    elif outcome == "provider_unavailable":
+        message = (
+            "⚠️ 코레일 접근 제한을 감지해 우회하지 않고 15분 동안 조회를 중단합니다."
+        )
+    elif outcome == "rate_limited":
+        new_state["cooldown_until"] = (
+            now.astimezone(KST) + timedelta(seconds=RATE_LIMIT_COOLDOWN_SECONDS)
+        ).isoformat()
+        message = "⚠️ 코레일 호출 제한을 감지해 15분 동안 조회를 중단합니다."
+    elif outage:
         new_state["cooldown_until"] = (
             now.astimezone(KST) + timedelta(seconds=OUTAGE_COOLDOWN_SECONDS)
         ).isoformat()
         message = "⚠️ 코레일 점검·서비스 중단을 감지해 5분 동안 조회를 중단합니다."
     else:
         message = f"⚠️ 코레일 2명 좌석 조회 실패: {outcome}"
-    return ("" if previous_error == outcome else message), new_state
+    return ("" if previous_error == error_key else message), new_state
 
 
 def _cooldown_active(state: dict[str, Any], now: datetime) -> bool:
@@ -150,6 +194,19 @@ def _cooldown_active(state: dict[str, Any], now: datetime) -> bool:
         return datetime.fromisoformat(raw) > now.astimezone(KST)
     except ValueError:
         return False
+
+
+def _minimum_interval_active(state: dict[str, Any], now: datetime) -> bool:
+    raw = state.get("last_attempt_at")
+    if not isinstance(raw, str):
+        return False
+    try:
+        last_attempt = datetime.fromisoformat(raw)
+    except ValueError:
+        return False
+    return now.astimezone(KST) - last_attempt.astimezone(KST) < timedelta(
+        seconds=MIN_QUERY_INTERVAL_SECONDS
+    )
 
 
 def _latest_summary(stdout: str, output_dir: Path) -> dict[str, Any]:
@@ -241,19 +298,24 @@ def prune_captures(keep: int = 5) -> None:
         shutil.rmtree(directory, ignore_errors=True)
 
 
-def main() -> int:
-    now = datetime.now(KST)
+def main(now: datetime | None = None) -> int:
+    now = now or datetime.now(KST)
     if not within_window(now):
         return 0
-    state = load_state()
-    if _cooldown_active(state, now):
-        return 0
-    summary = run_query(now)
-    message, new_state = evaluate_summary(summary, state, now)
-    save_state(new_state)
-    prune_captures()
-    if message:
-        print(message)
+    with exclusive_run_lock(LOCK_PATH) as acquired:
+        if not acquired:
+            return 0
+        state = load_state(STATE_PATH)
+        if _cooldown_active(state, now) or _minimum_interval_active(state, now):
+            return 0
+        state["last_attempt_at"] = now.astimezone(KST).isoformat()
+        save_state(state, STATE_PATH)
+        summary = run_query(now)
+        message, new_state = evaluate_summary(summary, state, now)
+        save_state(new_state, STATE_PATH)
+        prune_captures()
+        if message:
+            print(message)
     return 0
 
 
