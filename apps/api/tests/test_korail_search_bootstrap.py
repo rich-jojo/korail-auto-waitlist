@@ -78,6 +78,21 @@ def test_general_search_builder_emits_exact_safe_25_key_contract() -> None:
     assert {"mutMrkVrfCd", "srtJob", "selectedTrainList", "limitStartDate"}.isdisjoint(params)
 
 
+def test_general_search_builder_preserves_two_adult_passengers() -> None:
+    url = build_korail_general_search_url(
+        origin=KorailStationIdentity("0010", "대전"),
+        destination=KorailStationIdentity("0001", "서울"),
+        travel_date=date(2026, 8, 3),
+        departure_time=time(5, 55),
+        passenger_count=2,
+    )
+
+    params = dict(parse_qsl(urlsplit(url).query, keep_blank_values=True))
+
+    assert params["txtPsgFlg_1"] == "2"
+    assert validate_korail_general_search_url(url) == url
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

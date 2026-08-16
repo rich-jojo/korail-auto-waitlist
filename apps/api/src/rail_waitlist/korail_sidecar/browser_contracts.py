@@ -109,7 +109,7 @@ class BrowserSeatSearchResult(AdapterModel):
     origin: str = Field(min_length=1, max_length=40)
     destination: str = Field(min_length=1, max_length=40)
     travel_date: date
-    passenger_count: Literal[1]
+    passenger_count: int = Field(ge=1, le=9)
     observed_at: datetime
     official_search_url: str | None = Field(default=None, max_length=2048)
     # A successful official response can legitimately contain no trains, especially

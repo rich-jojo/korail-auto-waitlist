@@ -59,3 +59,25 @@ Remove-Item -LiteralPath secrets/korail-novnc-password.txt
 ```
 
 Linux에서는 같은 Compose 명령을 실행한 뒤 `rm -f secrets/korail-novnc-password.txt`로 제거합니다.
+
+## 로컬 읽기 전용 스모크
+
+호스트에 Chrome과 Xvfb가 설치된 Linux에서는 전체 Compose 스택 없이 공식 검색 화면을 한 번 읽을 수
+있습니다. `--passenger-count`는 1~9만 허용하며, 공식 결과 화면의 `총 N명`이 요청과 일치하지 않으면
+fail-closed합니다. 2명 이상 요청은 HTTP replay를 만들거나 재사용하지 않고 매 실행마다 GUI 공식 URL을
+한 번만 엽니다. 이 명령은 로그인·예약·결제를 수행하지 않습니다.
+
+```bash
+export KORAIL_BROWSER_CHROMIUM_EXECUTABLE_PATH=/usr/bin/google-chrome
+xvfb-run -a -s '-screen 0 1600x900x24 -nolisten tcp' \
+  uv run --project apps/api --locked --extra browser \
+  python -m rail_waitlist.korail_browser_mode_smoke \
+  --mode gui --origin 서대구 --destination 서울 \
+  --travel-date 2026-08-18 --departure-from 17:00 --departure-to 20:00 \
+  --passenger-count 2 --output-dir /tmp/korail-smoke \
+  --timeout-seconds 80 --overall-timeout-seconds 120
+```
+
+요약 JSON의 `trains`에는 알림 판단에 필요한 열차번호·출도착 시각·일반실/특실 상태만 포함되며,
+계정·승객 신원·결제 정보는 포함하지 않습니다. 보호·호출 제한·점검 신호가 나오면 반복 실행하지 말고
+기존 cooldown 원칙을 지킵니다.

@@ -18,7 +18,11 @@ from .korail_pydoll_browser import (
     _PydollSession,
     _PydollSessionContext,
 )
-from .korail_sidecar.browser_contracts import BrowserAdapterError, BrowserSeatSearchRequest
+from .korail_sidecar.browser_contracts import (
+    BrowserAdapterError,
+    BrowserSeatSearchRequest,
+    BrowserTrainSnapshot,
+)
 from .korail_sidecar.pydoll.page_contracts import PydollPageSnapshot
 from .provider_adapters.korail_search_bootstrap import KorailStationIdentityResolver
 
@@ -128,6 +132,20 @@ def file_evidence(path: Path) -> dict[str, object] | None:
     }
 
 
+def train_evidence(trains: list[BrowserTrainSnapshot]) -> list[dict[str, str]]:
+    return [
+        {
+            "train_number": train.train_number,
+            "train_type": train.train_type,
+            "departure_at": train.departure_at.isoformat(),
+            "arrival_at": train.arrival_at.isoformat(),
+            "standard": train.standard,
+            "first": train.first,
+        }
+        for train in trains
+    ]
+
+
 async def run(args: argparse.Namespace) -> int:
     require_private_output_platform()
     output_dir: Path = args.output_dir
@@ -164,7 +182,7 @@ async def run(args: argparse.Namespace) -> int:
         travel_date=args.travel_date,
         departure_from=args.departure_from,
         departure_to=args.departure_to,
-        passenger_count=1,
+        passenger_count=args.passenger_count,
     )
     client = PydollKorailBrowserClient(
         headless=headless,
@@ -183,7 +201,7 @@ async def run(args: argparse.Namespace) -> int:
             "travel_date": args.travel_date.isoformat(),
             "departure_from": args.departure_from.strftime("%H:%M"),
             "departure_to": args.departure_to.strftime("%H:%M"),
-            "passenger_count": 1,
+            "passenger_count": args.passenger_count,
         },
     }
     try:
@@ -197,6 +215,7 @@ async def run(args: argparse.Namespace) -> int:
             outcome="success",
             train_count=len(result.trains),
             seat_status_counts=dict(sorted(statuses.items())),
+            trains=train_evidence(result.trains),
         )
     except BrowserAdapterError as error:
         exit_code = 2
@@ -238,6 +257,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--travel-date", type=date.fromisoformat, required=True)
     value.add_argument("--departure-from", type=parse_clock_time, required=True)
     value.add_argument("--departure-to", type=parse_clock_time, required=True)
+    value.add_argument("--passenger-count", type=int, choices=range(1, 10), default=1)
     value.add_argument("--output-dir", type=Path, required=True)
     value.add_argument("--hold-seconds", type=int, choices=range(61), default=0)
     value.add_argument("--timeout-seconds", type=float, default=30)

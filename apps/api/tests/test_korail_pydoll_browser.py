@@ -317,6 +317,11 @@ class ProtectedDirectSession(FixtureSession):
         return PydollPageSnapshot(body_text="CODE -8003", rows=())
 
 
+class TwoPassengerDirectSession(FixtureSession):
+    async def current_passenger(self) -> str:
+        return "총 2명"
+
+
 @pytest.mark.asyncio
 async def test_direct_bootstrap_skips_picker_input_and_submit() -> None:
     session = FixtureSession(_fixture_snapshot())
@@ -324,7 +329,7 @@ async def test_direct_bootstrap_skips_picker_input_and_submit() -> None:
         page_url="http://127.0.0.1:8011/korail_browser_page.html",
         timeout_seconds=3,
         allow_test_loopback=True,
-        session_factory=FixtureSessionFactory(session),
+        session_factory=FixtureSessionFactory(session),  # type: ignore[arg-type]
         station_identity_resolver=StaticStationResolver(),  # type: ignore[arg-type]
     )
 
@@ -341,13 +346,32 @@ async def test_direct_bootstrap_skips_picker_input_and_submit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_direct_bootstrap_preserves_two_adult_passengers() -> None:
+    session = TwoPassengerDirectSession(_fixture_snapshot())
+    client = PydollKorailBrowserClient(
+        page_url="http://127.0.0.1:8011/korail_browser_page.html",
+        timeout_seconds=3,
+        allow_test_loopback=True,
+        session_factory=FixtureSessionFactory(session),  # type: ignore[arg-type]
+        station_identity_resolver=StaticStationResolver(),  # type: ignore[arg-type]
+    )
+    request = search_request().model_copy(update={"passenger_count": 2})
+
+    result = await client.search(request)
+
+    assert result.passenger_count == 2
+    assert result.official_search_url is not None
+    assert "txtPsgFlg_1=2" in result.official_search_url
+
+
+@pytest.mark.asyncio
 async def test_direct_bootstrap_protection_never_falls_back_to_ui_submit() -> None:
     session = ProtectedDirectSession(_fixture_snapshot())
     client = PydollKorailBrowserClient(
         page_url="http://127.0.0.1:8011/korail_browser_page.html",
         timeout_seconds=3,
         allow_test_loopback=True,
-        session_factory=FixtureSessionFactory(session),
+        session_factory=FixtureSessionFactory(session),  # type: ignore[arg-type]
         station_identity_resolver=StaticStationResolver(),  # type: ignore[arg-type]
     )
 

@@ -46,7 +46,6 @@ _FIXED_GENERAL_VALUES = {
     "txtMenuId": "11",
     "radJobId": "1",
     "searchType": "GENERAL",
-    "txtPsgFlg_1": "1",
     "txtPsgFlg_2": "0",
     "txtPsgFlg_3": "0",
     "txtPsgFlg_4": "0",
@@ -66,6 +65,7 @@ def build_korail_general_search_url(
     destination: KorailStationIdentity,
     travel_date: date,
     departure_time: clock_time,
+    passenger_count: int = 1,
 ) -> str:
     if origin.code == destination.code or origin.name == destination.name:
         raise ValueError("origin and destination must differ")
@@ -73,6 +73,8 @@ def build_korail_general_search_url(
         raise ValueError("origin code must be exactly four digits")
     if re.fullmatch(r"[0-9]{4}", destination.code) is None:
         raise ValueError("destination code must be exactly four digits")
+    if isinstance(passenger_count, bool) or not 1 <= passenger_count <= 9:
+        raise ValueError("passenger_count must be between 1 and 9")
     params = (
         ("srtCheckYn", "N"),
         ("ebizCrossCheck", "N"),
@@ -88,7 +90,7 @@ def build_korail_general_search_url(
         ("txtGoEndCode", destination.code),
         ("txtGoAbrdDt", travel_date.strftime("%Y%m%d")),
         ("txtGoHour", departure_time.strftime("%H0000")),
-        ("txtPsgFlg_1", "1"),
+        ("txtPsgFlg_1", str(passenger_count)),
         ("txtPsgFlg_2", "0"),
         ("txtPsgFlg_3", "0"),
         ("txtPsgFlg_4", "0"),
@@ -133,6 +135,8 @@ def validate_korail_general_search_url(value: str) -> str:
     params = dict(pairs)
     if any(params[key] != expected for key, expected in _FIXED_GENERAL_VALUES.items()):
         raise ValueError("official search URL fixed values are invalid")
+    if re.fullmatch(r"[1-9]", params["txtPsgFlg_1"]) is None:
+        raise ValueError("official search URL passenger count is invalid")
     if (
         not params["txtGoStart"].strip()
         or not params["txtGoEnd"].strip()

@@ -222,10 +222,12 @@ class PydollReadOnlySearchActor:
         return self._http_replay_manager.active_leases
 
     async def search(self, request: BrowserSeatSearchRequest) -> BrowserSeatSearchResult:
-        if request.passenger_count != 1:
-            raise BrowserSourceUnavailable("passenger_count_not_supported")
         async with self._search_lock:
-            replayed = await self._http_replay_manager.try_search(request)
+            replayed = (
+                await self._http_replay_manager.try_search(request)
+                if request.passenger_count == 1
+                else None
+            )
             if replayed is not None:
                 return replayed
             direct_url = await self.direct_search_url(
@@ -233,7 +235,10 @@ class PydollReadOnlySearchActor:
                 request.destination,
                 request.travel_date,
                 request.departure_from,
+                request.passenger_count,
             )
+            if direct_url is None and request.passenger_count != 1:
+                raise BrowserSourceUnavailable("passenger_count_not_supported")
             cold_recovery_used = False
             while True:
                 stage = "browser_launch"
@@ -261,7 +266,11 @@ class PydollReadOnlySearchActor:
                     else:
                         # Navigation itself starts the one official business lookup.
                         # Capture first, and never retry through the UI after this point.
-                        capture_started = await self._http_replay_manager.begin_capture(session)
+                        capture_started = (
+                            await self._http_replay_manager.begin_capture(session)
+                            if request.passenger_count == 1
+                            else False
+                        )
                         stage = "direct_navigation"
                         self._response_safety_guard(await session.navigate_fresh(direct_url), stage)
                     stage = "wait_result"
@@ -352,6 +361,7 @@ class PydollReadOnlySearchActor:
         destination: str,
         travel_date: date,
         departure_time: clock_time,
+        passenger_count: int = 1,
     ) -> str | None:
         resolver = self._station_identity_resolver
         if resolver is None:
@@ -365,6 +375,7 @@ class PydollReadOnlySearchActor:
             destination=destination_identity,
             travel_date=travel_date,
             departure_time=departure_time,
+            passenger_count=passenger_count,
         )
 
     async def _acquire_session(self) -> _ReadOnlySearchSessionLease:
@@ -435,7 +446,7 @@ class PydollReadOnlySearchActor:
         destination_matches = destination == request.destination
         departure_date_matches = selected_date == request.travel_date
         departure_hour_matches = selected_hour == request.departure_from.hour
-        passenger_matches = passenger == "총 1명"
+        passenger_matches = passenger == f"총 {request.passenger_count}명"
         if not all(
             (
                 origin_matches,
@@ -467,13 +478,13 @@ class PydollReadOnlySearchActor:
         if (
             selected_date != request.travel_date
             or selected_hour != request.departure_from.hour
-            or passenger != "총 1명"
+            or passenger != f"총 {request.passenger_count}명"
         ):
             self._event_logger.warning(
                 "KORAIL Pydoll result identity mismatch date=%s hour=%s passenger=%s",
                 selected_date == request.travel_date,
                 selected_hour == request.departure_from.hour,
-                passenger == "총 1명",
+                passenger == f"총 {request.passenger_count}명",
             )
             raise BrowserSourceUnavailable("result_identity_check")
 
@@ -532,7 +543,7 @@ class PydollReadOnlySearchActor:
             origin=request.origin,
             destination=request.destination,
             travel_date=request.travel_date,
-            passenger_count=1,
+            passenger_count=request.passenger_count,
             observed_at=datetime.now(UTC),
             trains=trains,
         )

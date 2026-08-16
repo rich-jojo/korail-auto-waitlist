@@ -117,6 +117,7 @@
 - [ ] KORAIL Pydoll carousel mouse release가 반복 취소 중에도 완료되도록 cancellation-resilient cleanup 보강
 - [x] KORAIL Pydoll 검색 form·결과 DOM driver canonical owner 이동과 browser direct consumer·legacy exact facade 보존
 - [x] KORAIL Pydoll read-only 검색 actor canonical owner 이동과 replay-first·direct/UI·취소 안전 cleanup·legacy exact facade 보존
+- [x] KORAIL Pydoll 로컬 읽기 스모크의 1~9명 공식 direct URL·결과 인원 readback, 2명 이상 HTTP replay 비활성화와 비민감 열차 상태 요약
 - [x] KORAIL Pydoll credential-bound 인증 session actor canonical owner 이동과 secret-free fingerprint·TTL/횟수·취소 안전 cleanup·legacy exact facade 보존
 - [x] 활성 철도 계정의 시작 예열과 30초 sanitized telemetry 점검, 동일 generation `READY` 생략·120초 전 bounded 재예열, KORAIL 인증 JSON positive-only probe·최초 로그인 DOM fallback·keepalive fail-closed, 403/429 보호 유지, 60~900초 backoff와 auth revision fence 계약
 - [x] KORAIL 인증 session 재사용 TTL을 `last_verified_at` 절대 기준으로 고정하고 검색·예약·실패의 `last_used_at` 갱신으로 연장하지 않는 계약
