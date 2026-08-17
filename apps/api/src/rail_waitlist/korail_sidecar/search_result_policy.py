@@ -75,6 +75,8 @@ def status_from_seat_box(text: str, classes: set[str]) -> SeatStatus | None:
     classes = {item.casefold() for item in classes}
     if re.search(r"예약\s*대기", normalized):
         return "waitlist_available"
+    if "lack_seat" in classes or re.search(r"좌석\s*부족", normalized):
+        return "sold_out"
     if "sold_out_soon" in classes or re.search(r"매진\s*임박", normalized):
         return "limited"
     if re.search(r"입석\s*\+\s*(?:좌석|예매)", normalized):

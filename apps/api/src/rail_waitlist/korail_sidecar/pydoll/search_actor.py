@@ -529,7 +529,7 @@ class PydollReadOnlySearchActor:
             )
             single_class_result = (
                 first_box_fare is not None
-                and first_box_status == "available"
+                and "gen" in first_box.classes
                 and second_box_fare is None
                 and not explicit_dual_class_boxes
                 and second_box_status is not None

@@ -22,9 +22,13 @@ START_HOUR = 12
 END_HOUR = 16
 REPO = Path("/home/jojo/projects/korail-auto-waitlist")
 API_PROJECT = REPO / "apps/api"
-STATE_PATH = Path.home() / ".local/state/korail-2p-watchdog/state.json"
-LOCK_PATH = Path.home() / ".local/state/korail-2p-watchdog/watchdog.lock"
-CAPTURE_ROOT = Path.home() / ".cache/railwait/watch"
+ORIGIN = os.environ.get("KORAIL_ORIGIN", "서대구")
+DESTINATION = os.environ.get("KORAIL_DESTINATION", "서울")
+ROUTE_ID = os.environ.get("KORAIL_ROUTE_ID", "seodaegu-seoul")
+STATE_ROOT = Path.home() / ".local/state/korail-2p-watchdog" / ROUTE_ID
+STATE_PATH = STATE_ROOT / "state.json"
+LOCK_PATH = STATE_ROOT / "watchdog.lock"
+CAPTURE_ROOT = Path.home() / ".cache/railwait/watch" / ROUTE_ID
 OFFICIAL_URL = "https://www.korail.com/ticket/search"
 AVAILABLE_STATUSES = {"available", "limited"}
 PROTECTION_COOLDOWN_SECONDS = 900
@@ -116,7 +120,7 @@ def _clock(value: str) -> str:
 def availability_message(entries: list[dict[str, str]]) -> str:
     lines = [
         "🚄 코레일 성인 2명 좌석 가능",
-        "서대구→서울 · 2026-08-18 · 출발 17:00~20:00",
+        f"{ORIGIN}→{DESTINATION} · {TARGET_DATE} · 출발 17:00~20:00",
     ]
     for entry in entries:
         qualifier = "여유" if entry["status"] == "available" else "한정"
@@ -251,9 +255,9 @@ def run_query(now: datetime) -> dict[str, Any]:
         "--mode",
         "gui",
         "--origin",
-        "서대구",
+        ORIGIN,
         "--destination",
-        "서울",
+        DESTINATION,
         "--travel-date",
         TARGET_DATE,
         "--departure-from",
