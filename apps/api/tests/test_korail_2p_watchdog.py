@@ -48,6 +48,19 @@ def test_first_two_passenger_availability_emits_actionable_notification() -> Non
     assert state["available_keys"] == ["216:standard"]
 
 
+def test_one_passenger_configuration_changes_notification_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(watchdog, "PASSENGER_COUNT", 1)
+
+    message = watchdog.availability_message(
+        watchdog.available_entries(success_summary())
+    )
+
+    assert "성인 1명 좌석 가능" in message
+    assert "1명 조건 조회" in message
+
+
 def test_unchanged_availability_is_silent() -> None:
     now = datetime.fromisoformat("2026-08-18T09:10:00+09:00")
 

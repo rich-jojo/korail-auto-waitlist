@@ -25,6 +25,7 @@ API_PROJECT = REPO / "apps/api"
 ORIGIN = os.environ.get("KORAIL_ORIGIN", "서대구")
 DESTINATION = os.environ.get("KORAIL_DESTINATION", "서울")
 ROUTE_ID = os.environ.get("KORAIL_ROUTE_ID", "seodaegu-seoul")
+PASSENGER_COUNT = int(os.environ.get("KORAIL_PASSENGER_COUNT", "2"))
 STATE_ROOT = Path.home() / ".local/state/korail-2p-watchdog" / ROUTE_ID
 STATE_PATH = STATE_ROOT / "state.json"
 LOCK_PATH = STATE_ROOT / "watchdog.lock"
@@ -119,7 +120,7 @@ def _clock(value: str) -> str:
 
 def availability_message(entries: list[dict[str, str]]) -> str:
     lines = [
-        "🚄 코레일 성인 2명 좌석 가능",
+        f"🚄 코레일 성인 {PASSENGER_COUNT}명 좌석 가능",
         f"{ORIGIN}→{DESTINATION} · {TARGET_DATE} · 출발 17:00~20:00",
     ]
     for entry in entries:
@@ -127,7 +128,7 @@ def availability_message(entries: list[dict[str, str]]) -> str:
         lines.append(
             f"- {entry['train_type']} {entry['train_number']} "
             f"{_clock(entry['departure_at'])}→{_clock(entry['arrival_at'])} "
-            f"{entry['seat_label']} ({qualifier}, 2명 조건 조회)"
+            f"{entry['seat_label']} ({qualifier}, {PASSENGER_COUNT}명 조건 조회)"
         )
     lines.extend(
         (f"공식 예매: {OFFICIAL_URL}", "자동 예약·구매·결제는 하지 않았습니다.")
@@ -187,7 +188,7 @@ def evaluate_summary(
         ).isoformat()
         message = "⚠️ 코레일 점검·서비스 중단을 감지해 5분 동안 조회를 중단합니다."
     else:
-        message = f"⚠️ 코레일 2명 좌석 조회 실패: {outcome}"
+        message = f"⚠️ 코레일 {PASSENGER_COUNT}명 좌석 조회 실패: {outcome}"
     return ("" if previous_error == error_key else message), new_state
 
 
@@ -265,7 +266,7 @@ def run_query(now: datetime) -> dict[str, Any]:
         "--departure-to",
         "20:00",
         "--passenger-count",
-        "2",
+        str(PASSENGER_COUNT),
         "--output-dir",
         str(output_dir),
         "--timeout-seconds",
