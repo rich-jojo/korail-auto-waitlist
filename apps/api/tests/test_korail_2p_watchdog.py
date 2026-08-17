@@ -166,9 +166,9 @@ def test_main_skips_provider_call_inside_minimum_interval(
     assert watchdog.main(now) == 0
 
 
-def test_watchdog_runs_only_in_requested_kst_window() -> None:
-    assert watchdog.within_window(datetime.fromisoformat("2026-08-18T09:00:00+09:00"))
-    assert watchdog.within_window(datetime.fromisoformat("2026-08-18T19:59:59+09:00"))
-    assert not watchdog.within_window(datetime.fromisoformat("2026-08-18T08:59:59+09:00"))
-    assert not watchdog.within_window(datetime.fromisoformat("2026-08-18T20:00:00+09:00"))
-    assert not watchdog.within_window(datetime.fromisoformat("2027-08-18T09:00:00+09:00"))
+def test_watchdog_runs_only_until_four_pm_on_monitoring_day() -> None:
+    assert watchdog.within_window(datetime.fromisoformat("2026-08-17T12:00:00+09:00"))
+    assert watchdog.within_window(datetime.fromisoformat("2026-08-17T15:59:59+09:00"))
+    assert not watchdog.within_window(datetime.fromisoformat("2026-08-17T11:59:59+09:00"))
+    assert not watchdog.within_window(datetime.fromisoformat("2026-08-17T16:00:00+09:00"))
+    assert not watchdog.within_window(datetime.fromisoformat("2026-08-18T12:00:00+09:00"))

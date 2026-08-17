@@ -384,6 +384,11 @@ def test_seat_text_contract_is_fail_closed() -> None:
     assert status_from_seat_box("새로운 알 수 없는 문구", set()) is None
 
 
+def test_booking_action_text_is_available() -> None:
+    assert status_from_seat_box("예매", set()) == "available"
+    assert status_from_seat_box("예약하기", set()) == "available"
+
+
 def test_primary_timetable_fields_are_exact_and_fare_is_fail_closed() -> None:
     assert parse_official_train_type("KTX 043") == "KTX"
     assert parse_official_train_type("KTX-산천 193") == "KTX-산천"

@@ -89,6 +89,8 @@ def status_from_seat_box(text: str, classes: set[str]) -> SeatStatus | None:
         return "not_offered"
     if re.search(r"(?:예매|예약)\s*불가", normalized):
         return None
+    if re.fullmatch(r"(?:바로\s*)?(?:예매|예약)(?:하기)?", normalized):
+        return "available"
     if re.search(r"\d{1,3}(?:,\d{3})*\s*원|(?:예매|예약)\s*가능", normalized):
         return "available"
     return None

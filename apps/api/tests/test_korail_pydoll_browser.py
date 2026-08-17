@@ -147,6 +147,44 @@ def test_pydoll_snapshot_preserves_one_exact_delay_estimate() -> None:
     assert result.trains[0].arrival_at.isoformat() == "2026-08-03T17:40:00+09:00"
 
 
+def test_pydoll_current_single_class_row_uses_booking_action_not_fare_as_availability() -> None:
+    snapshot = PydollPageSnapshot(
+        body_text="KORAIL 열차 조회 결과",
+        rows=(
+            PydollTrainRow(
+                kind_text="KTX 216",
+                train_number="216",
+                route_text="서대구 → 서울(18:04 ~ 20:00)",
+                seats=(
+                    PydollSeatBox(
+                        text="일반실 42,300원 5%적립",
+                        classes=frozenset({"price_box"}),
+                    ),
+                    PydollSeatBox(
+                        text="매진",
+                        classes=frozenset({"price_box", "sold_out"}),
+                    ),
+                ),
+                full_text="KTX 216 서대구 → 서울(18:04 ~ 20:00) 일반실 42,300원 매진",
+            ),
+        ),
+    )
+    request = BrowserSeatSearchRequest(
+        origin="서대구",
+        destination="서울",
+        travel_date=date(2026, 8, 18),
+        departure_from=time(17),
+        departure_to=time(20),
+        passenger_count=2,
+    )
+
+    result = PydollKorailBrowserClient._read_result(snapshot, request)
+
+    assert result.trains[0].adult_fare == 42_300
+    assert result.trains[0].standard == "sold_out"
+    assert result.trains[0].first == "not_offered"
+
+
 def test_pydoll_snapshot_preserves_overnight_arrival_and_only_one_fare() -> None:
     snapshot = PydollPageSnapshot(
         body_text="KORAIL 열차 조회 결과",

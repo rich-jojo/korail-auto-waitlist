@@ -17,8 +17,9 @@ from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
 TARGET_DATE = "2026-08-18"
-START_HOUR = 9
-END_HOUR = 20
+MONITOR_DATE = "2026-08-17"
+START_HOUR = 12
+END_HOUR = 16
 REPO = Path("/home/jojo/projects/korail-auto-waitlist")
 API_PROJECT = REPO / "apps/api"
 STATE_PATH = Path.home() / ".local/state/korail-2p-watchdog/state.json"
@@ -69,7 +70,7 @@ def exclusive_run_lock(path: Path = LOCK_PATH) -> Iterator[bool]:
 
 def within_window(now: datetime) -> bool:
     return (
-        now.astimezone(KST).date().isoformat() == TARGET_DATE
+        now.astimezone(KST).date().isoformat() == MONITOR_DATE
         and START_HOUR <= now.astimezone(KST).hour < END_HOUR
     )
 

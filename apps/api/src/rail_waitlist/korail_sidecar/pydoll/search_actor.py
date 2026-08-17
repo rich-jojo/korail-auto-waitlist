@@ -23,6 +23,7 @@ from ..browser_contracts import (
     BrowserSeatSearchResult,
     BrowserSourceUnavailable,
     BrowserTrainSnapshot,
+    SeatStatus,
 )
 from ..browser_service_availability import BrowserProviderUnavailable
 from ..http_replay import KorailHttpReplayPlan
@@ -512,8 +513,35 @@ class PydollReadOnlySearchActor:
             arrival_time = clock_time.fromisoformat(route.group(4))
             if len(row.seats) != 2:
                 raise BrowserSourceUnavailable("read_result")
-            standard = status_from_seat_box(row.seats[0].text, set(row.seats[0].classes))
-            first = status_from_seat_box(row.seats[1].text, set(row.seats[1].classes))
+            first_box, second_box = row.seats
+            first_box_classes = set(first_box.classes)
+            second_box_classes = set(second_box.classes)
+            first_box_fare = parse_unambiguous_adult_fare(first_box.text)
+            second_box_fare = parse_unambiguous_adult_fare(second_box.text)
+            first_box_status = status_from_seat_box(first_box.text, first_box_classes)
+            second_box_status = status_from_seat_box(second_box.text, second_box_classes)
+            # KORAIL's current filtered result row renders two price boxes as
+            # (selected-class fare, booking action), while the legacy layout rendered
+            # them as (standard, first). Prefer explicit gen/spe roles; otherwise an
+            # unambiguous fare followed by a status-only box is the filtered layout.
+            explicit_dual_class_boxes = (
+                "gen" in first_box_classes and "spe" in second_box_classes
+            )
+            single_class_result = (
+                first_box_fare is not None
+                and first_box_status == "available"
+                and second_box_fare is None
+                and not explicit_dual_class_boxes
+                and second_box_status is not None
+            )
+            standard: SeatStatus | None
+            first: SeatStatus | None
+            if single_class_result and "일반실" in first_box.text:
+                standard, first = second_box_status, "not_offered"
+            elif single_class_result and "특실" in first_box.text:
+                standard, first = "not_offered", second_box_status
+            else:
+                standard, first = first_box_status, second_box_status
             if standard is None or first is None:
                 raise BrowserSourceUnavailable("read_result")
             departure_at, arrival_at = service_datetimes(
